@@ -310,7 +310,7 @@ class PortfolioGUI:
     def update_chart(self):
         self.ax.clear()
         self.ax.set_facecolor('#1e1e1e')
-        algs = ['DP', 'Greedy (0/1)', 'B&B']
+        algs = ['DP', 'Greedy (Frac)', 'B&B']
         vals = [self.chart_results["DP"], self.chart_results["Greedy"], self.chart_results["B&B"]]
         colors = ['#00adb5', '#FFB300', '#9c27b0']
         bars = self.ax.bar(algs, vals, color=colors, width=0.5)
@@ -412,9 +412,7 @@ class PortfolioGUI:
                 self._update_matrix("Greedy (Frac)", v, t, "Approx")
                 self.summary.update_summary(al, v, b)
                 self._log(f"Greedy (Frac) Result: ${v:.1f}")
-                # Use 0/1 Greedy version for chart to maintain apples-to-apples 0/1 comparison
-                g01_v, _, _ = opt.greedy_01()
-                self.chart_results["Greedy"] = g01_v
+                self.chart_results["Greedy"] = v
                 self.update_chart()
         except Exception as e: 
             self._log(f"Greedy Error: {e}")
