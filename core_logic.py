@@ -18,15 +18,20 @@ class PortfolioOptimizer:
 
     def dynamic_programming(self) -> Tuple[float, List[Asset], float, List[List[float]], List[List[bool]], int]:
         start_time = time.perf_counter()
-        # Find maximum decimal places to determine scale
+        # Find maximum decimal places to determine scale (checking both assets and budget)
         max_decimals = 0
-        for asset in self.assets:
-            s_cost = str(asset.cost)
-            if '.' in s_cost:
-                max_decimals = max(max_decimals, len(s_cost.split('.')[1]))
+        for val in [a.cost for a in self.assets] + [self.budget]:
+            s_val = str(float(val))
+            if '.' in s_val:
+                decimals = len(s_val.split('.')[1].rstrip('0'))
+                max_decimals = max(max_decimals, decimals)
         
-        scale = 10 ** max_decimals
+        scale = 10 ** min(max_decimals, 2) # Cap scale to 100 to prevent MemoryError
         W = int(self.budget * scale)
+        
+        # Safety net to prevent out-of-memory crash
+        if W > 100000:
+            raise ValueError("Budget and precision combination too high for DP memory limits.")
         n = len(self.assets)
         
         # Using 2D DP table for visualization purposes (Asset i+1 vs Budget w)
@@ -52,14 +57,16 @@ class PortfolioOptimizer:
         self.last_dp_W = W
         self.last_dp_path = []
         
-        # Backtrack to find path as requested
+        # Backtrack to find path as requested (tracking every visited cell)
         curr_i, curr_w = n, W
-        while curr_i > 0 and curr_w > 0:
+        while curr_i > 0 and curr_w >= 0:
+            self.last_dp_path.append((curr_i, curr_w))
             if dp[curr_i][curr_w] != dp[curr_i-1][curr_w]:
-                self.last_dp_path.append((curr_i, curr_w))
                 cost_i = int(self.assets[curr_i-1].cost * scale)
                 curr_w -= cost_i
             curr_i -= 1
+        if curr_w >= 0:
+            self.last_dp_path.append((0, curr_w))
         if (0, 0) not in self.last_dp_path:
             self.last_dp_path.append((0, 0))
 
@@ -130,7 +137,7 @@ class PortfolioOptimizer:
                 self.items_included = items_included
                 
         def bound(node: Node) -> float:
-            if node.weight >= self.budget:
+            if node.weight > self.budget:
                 return 0
             
             profit_bound = node.profit

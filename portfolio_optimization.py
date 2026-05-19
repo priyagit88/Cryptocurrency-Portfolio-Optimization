@@ -374,6 +374,8 @@ class PortfolioGUI:
                 self.name_var.set("")
                 self.cost_var.set("")
                 self.return_var.set("")
+            else:
+                messagebox.showwarning("Invalid Input", "Asset name cannot be empty and cost must be > 0.")
         except: 
             messagebox.showerror("Error", "Check Asset Inputs")
 
@@ -458,8 +460,11 @@ class PortfolioGUI:
         win.after(200, win.focus_force)
         
         cols = list(range(0, W+1, max(1, W//100)))
-        if W not in cols: 
-            cols.append(W)
+        # Ensure all path weights are rendered
+        for _, w in p_set:
+            if w not in cols:
+                cols.append(w)
+        cols = sorted(list(set(cols))) # Sort and deduplicate
             
         c_p = ctk.CTkFrame(win, fg_color="transparent")
         c_p.pack(fill="both", expand=True, padx=10, pady=10)
