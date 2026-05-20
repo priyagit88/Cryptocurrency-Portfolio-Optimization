@@ -18,7 +18,8 @@ class PortfolioGUI:
         ctk.set_default_color_theme("blue")
         
         self.root.title("Crypto Portfolio Optimizer Pro Dashboard")
-        self.root.geometry("1300x820")
+        self.root.geometry("1200x700")
+        self.root.minsize(1000, 600)
         
         # State Variables
         self.assets = []
@@ -212,16 +213,7 @@ class PortfolioGUI:
         btn_bb = ctk.CTkButton(bg, text="B&B", fg_color="#333333", hover_color="#444444", text_color="white", font=('Segoe UI', 13, 'bold'), command=self.run_bb)
         btn_bb.pack(side="left", expand=True, fill="x", padx=2)
         
-        self.v_dp_btn = ctk.CTkButton(
-            p4_body, 
-            text="View DP Matrix Graph", 
-            fg_color="#4b6584", 
-            hover_color="#3b5998", 
-            text_color="white", 
-            font=('Segoe UI', 13, 'bold'),
-            command=self.show_dp_table_window
-        )
-        self.v_dp_btn.pack(fill="x")
+
 
         # Result Matrix Card
         p5 = ctk.CTkFrame(right, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
@@ -238,44 +230,6 @@ class PortfolioGUI:
             self.comp.heading(c, text=h)
             self.comp.column(c, width=100, anchor="center")
         self.comp.pack(fill="x")
-
-        # CEX Panel Card
-        p6 = ctk.CTkFrame(right, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
-        p6.pack(fill="x", pady=(0, 10))
-        
-        p6_title = ctk.CTkLabel(p6, text="GREEDY FAILURE PROOF DEMO", font=('Segoe UI', 13, 'bold'), text_color=self.accent_color)
-        p6_title.pack(anchor="w", padx=10, pady=(8, 4))
-        
-        p6_body = ctk.CTkFrame(p6, fg_color="transparent")
-        p6_body.pack(fill="x", padx=10, pady=(0, 10))
-        
-        btn_cex = ctk.CTkButton(
-            p6_body, 
-            text="Load 0/1 Greedy vs DP Demo", 
-            fg_color="#333333", 
-            hover_color="#444444", 
-            text_color="white",
-            font=('Segoe UI', 12, 'bold'),
-            command=self.load_counterexample
-        )
-        btn_cex.pack(anchor="w", pady=(0, 6))
-        
-        self.cex_t = tk.StringVar(value="Load demo...")
-        lbl_cex_t = ctk.CTkLabel(p6_body, textvariable=self.cex_t, font=('Consolas', 13), anchor="w")
-        lbl_cex_t.pack(fill="x", pady=2)
-        
-        self.cex_w = tk.StringVar()
-        lbl_cex_w = ctk.CTkLabel(p6_body, textvariable=self.cex_w, font=('Segoe UI', 14, 'bold'), text_color="#00ff00", anchor="w")
-        lbl_cex_w.pack(anchor="w", pady=2)
-        
-        lbl_cex_note = ctk.CTkLabel(
-            p6_body, 
-            text="Note: Greedy picks high ratio Q (2.0) but DP captures R+P combinatorially", 
-            text_color="#888888", 
-            font=('Segoe UI', 12, 'italic'),
-            anchor="w"
-        )
-        lbl_cex_note.pack(anchor="w", pady=(3, 0))
 
         # Log Panel Card
         p7 = ctk.CTkFrame(right, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
@@ -397,7 +351,7 @@ class PortfolioGUI:
                 self.last_dp_W = int(b * s)
                 self.last_dp_scale = s
                 self.last_dp_return = v
-                self._update_matrix("DP (0/1)", v, t)
+                self._update_matrix("DP (0/1)", v, t, "Sub-Optimal")
                 self.summary.update_summary(ch, v, b)
                 self.chart_results["DP"] = v
                 self.update_chart()
@@ -411,7 +365,7 @@ class PortfolioGUI:
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
                 v, al, t = opt.greedy_fractional()
-                self._update_matrix("Greedy (Frac)", v, t, "Approx")
+                self._update_matrix("Greedy (Frac)", v, t, "Optimal")
                 self.summary.update_summary(al, v, b)
                 self._log(f"Greedy (Frac) Result: ${v:.1f}")
                 self.chart_results["Greedy"] = v
@@ -425,7 +379,7 @@ class PortfolioGUI:
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
                 v, ch, t = opt.branch_and_bound()
-                self._update_matrix("B&B (0/1)", v, t)
+                self._update_matrix("B&B (0/1)", v, t, "Sub-Optimal")
                 self.summary.update_summary(ch, v, b)
                 self.chart_results["B&B"] = v
                 self.update_chart()
