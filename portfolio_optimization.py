@@ -22,12 +22,6 @@ class PortfolioGUI:
         
         # State Variables
         self.assets = []
-        self.last_dp_table = None
-        self.last_dp_path = None
-        self.last_dp_assets = None
-        self.last_dp_W = 0
-        self.last_dp_scale = 1
-        self.last_dp_return = 0.0
         self.chart_results = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
 
         # GUI Variables (Explicit separation to fix leaks)
@@ -212,16 +206,6 @@ class PortfolioGUI:
         btn_bb = ctk.CTkButton(bg, text="B&B", fg_color="#333333", hover_color="#444444", text_color="white", font=('Segoe UI', 13, 'bold'), command=self.run_bb)
         btn_bb.pack(side="left", expand=True, fill="x", padx=2)
         
-        self.v_dp_btn = ctk.CTkButton(
-            p4_body, 
-            text="View DP Matrix Graph", 
-            fg_color="#4b6584", 
-            hover_color="#3b5998", 
-            text_color="white", 
-            font=('Segoe UI', 13, 'bold'),
-            command=self.show_dp_table_window
-        )
-        self.v_dp_btn.pack(fill="x")
 
         # Result Matrix Card
         p5 = ctk.CTkFrame(right, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
@@ -239,43 +223,6 @@ class PortfolioGUI:
             self.comp.column(c, width=100, anchor="center")
         self.comp.pack(fill="x")
 
-        # CEX Panel Card
-        p6 = ctk.CTkFrame(right, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
-        p6.pack(fill="x", pady=(0, 10))
-        
-        p6_title = ctk.CTkLabel(p6, text="GREEDY FAILURE PROOF DEMO", font=('Segoe UI', 13, 'bold'), text_color=self.accent_color)
-        p6_title.pack(anchor="w", padx=10, pady=(8, 4))
-        
-        p6_body = ctk.CTkFrame(p6, fg_color="transparent")
-        p6_body.pack(fill="x", padx=10, pady=(0, 10))
-        
-        btn_cex = ctk.CTkButton(
-            p6_body, 
-            text="Load 0/1 Greedy vs DP Demo", 
-            fg_color="#333333", 
-            hover_color="#444444", 
-            text_color="white",
-            font=('Segoe UI', 12, 'bold'),
-            command=self.load_counterexample
-        )
-        btn_cex.pack(anchor="w", pady=(0, 6))
-        
-        self.cex_t = tk.StringVar(value="Load demo...")
-        lbl_cex_t = ctk.CTkLabel(p6_body, textvariable=self.cex_t, font=('Consolas', 13), anchor="w")
-        lbl_cex_t.pack(fill="x", pady=2)
-        
-        self.cex_w = tk.StringVar()
-        lbl_cex_w = ctk.CTkLabel(p6_body, textvariable=self.cex_w, font=('Segoe UI', 14, 'bold'), text_color="#00ff00", anchor="w")
-        lbl_cex_w.pack(anchor="w", pady=2)
-        
-        lbl_cex_note = ctk.CTkLabel(
-            p6_body, 
-            text="Note: Greedy picks high ratio Q (2.0) but DP captures R+P combinatorially", 
-            text_color="#888888", 
-            font=('Segoe UI', 12, 'italic'),
-            anchor="w"
-        )
-        lbl_cex_note.pack(anchor="w", pady=(3, 0))
 
         # Log Panel Card
         p7 = ctk.CTkFrame(right, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
@@ -340,17 +287,6 @@ class PortfolioGUI:
         self.refresh()
         self._log("Demo dataset loaded (600 budget).")
 
-    def load_counterexample(self):
-        self.assets = [Asset("P", 1, 1), Asset("Q", 2, 4), Asset("R", 3, 5)]
-        self.budget_var.set("4")
-        self.refresh()
-        opt = PortfolioOptimizer(4, self.assets)
-        g_v, _, _ = opt.greedy_01()
-        dp_v, _, _, _, _, _ = opt.dynamic_programming()
-        self.cex_t.set(f"Greedy 0/1 Total: ${g_v} | DP Total: ${dp_v}")
-        self.cex_w.set(f"DP Efficiency Win: +${dp_v - g_v}")
-        self.run_all()
-
     def refresh(self):
         for i in self.tree.get_children(): 
             self.tree.delete(i)
@@ -390,14 +326,8 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, ch, t, tbl, p, s = opt.dynamic_programming()
-                self.last_dp_table = tbl
-                self.last_dp_path = p
-                self.last_dp_assets = opt.assets[:]
-                self.last_dp_W = int(b * s)
-                self.last_dp_scale = s
-                self.last_dp_return = v
-                self._update_matrix("DP (0/1)", v, t)
+                v, ch, t = opt.dynamic_programming()
+                self._update_matrix("DP (0/1)", v, t, "Sub-Optimal")
                 self.summary.update_summary(ch, v, b)
                 self.chart_results["DP"] = v
                 self.update_chart()
@@ -439,72 +369,6 @@ class PortfolioGUI:
                 self.comp.delete(i)
         self.comp.insert("", "end", values=(s, f"${v:.1f}", f"{t*1000:.1f}ms", n))
 
-    def show_dp_table_window(self):
-        if not self.last_dp_table:
-            messagebox.showwarning("Incomplete", "Run DP algorithm first to generate matrix.")
-            return
-        tbl = self.last_dp_table
-        p_set = set(self.last_dp_path)
-        assets = self.last_dp_assets
-        W = self.last_dp_W
-        n = len(assets)
-        v = self.last_dp_return
-        
-        win = ctk.CTkToplevel(self.root)
-        win.title(f"DP State Transition Graph - Return: ${v:.1f}")
-        win.geometry("1000x700")
-        win.configure(fg_color=self.bg_color)
-        
-        # Focus management for Toplevel
-        win.after(100, win.lift)
-        win.after(200, win.focus_force)
-        
-        cols = list(range(0, W+1, max(1, W//100)))
-        # Ensure all path weights are rendered
-        for _, w in p_set:
-            if w not in cols:
-                cols.append(w)
-        cols = sorted(list(set(cols))) # Sort and deduplicate
-            
-        c_p = ctk.CTkFrame(win, fg_color="transparent")
-        c_p.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        cnv = tk.Canvas(c_p, bg=self.bg_color, highlightthickness=0)
-        
-        # Style Toplevel scrollbars
-        self.style.configure("Custom.Vertical.TScrollbar", troughcolor=self.bg_color, background="#333333")
-        self.style.configure("Custom.Horizontal.TScrollbar", troughcolor=self.bg_color, background="#333333")
-        
-        vs = ttk.Scrollbar(c_p, orient="vertical", command=cnv.yview, style="Custom.Vertical.TScrollbar")
-        hs = ttk.Scrollbar(win, orient="horizontal", command=cnv.xview, style="Custom.Horizontal.TScrollbar")
-        
-        frm = tk.Frame(cnv, bg=self.bg_color)
-        frm.bind("<Configure>", lambda e: cnv.configure(scrollregion=cnv.bbox("all")))
-        cnv.create_window((0,0), window=frm, anchor="nw")
-        
-        cnv.configure(yscrollcommand=vs.set, xscrollcommand=hs.set)
-        cnv.bind_all("<MouseWheel>", lambda e: cnv.yview_scroll(int(-1*(e.delta/120)),"units"))
-        
-        # Header Row
-        for idx, w in enumerate(cols): 
-            tk.Label(frm, text=f"w={w}", bg=self.accent_color, fg="white", font=('Segoe UI', 11, 'bold'), width=8, relief="flat").grid(row=0, column=idx+1, padx=1, pady=1)
-            
-        # Data Rows
-        for i in range(n+1):
-            nm = assets[i-1].name if i>0 else "Base"
-            tk.Label(frm, text=nm, bg="#2d2d2d", fg="white", font=('Segoe UI', 11, 'bold'), width=25, anchor="w", padx=10, relief="flat").grid(row=i+1, column=0, padx=1, pady=1)
-            for idx, w in enumerate(cols):
-                is_p = (i,w) in p_set
-                bg = "#FFB300" if is_p else "#1e1e1e"
-                fg = "black" if is_p else "white"
-                tk.Label(frm, text=f"{tbl[i][w]:.0f}"+(" *" if is_p else ""), bg=bg, fg=fg, font=('Consolas', 11), width=8, relief="flat").grid(row=i+1, column=idx+1, padx=1, pady=1)
-                
-        cnv.pack(side="left", fill="both", expand=True)
-        vs.pack(side="right", fill="y")
-        hs.pack(fill="x", padx=10, pady=(0, 6))
-        
-        dismiss_btn = ctk.CTkButton(win, text="Dismiss Visualization", fg_color=self.accent_color, hover_color="#008080", text_color="white", command=win.destroy)
-        dismiss_btn.pack(pady=10)
 
 if __name__ == "__main__":
     app = ctk.CTk()

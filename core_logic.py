@@ -16,7 +16,7 @@ class PortfolioOptimizer:
         self.budget = budget
         self.assets = assets
 
-    def dynamic_programming(self) -> Tuple[float, List[Asset], float, List[List[float]], List[List[bool]], int]:
+    def dynamic_programming(self) -> Tuple[float, List[Asset], float]:
         start_time = time.perf_counter()
         # Find maximum decimal places to determine scale (checking both assets and budget)
         max_decimals = 0
@@ -34,7 +34,7 @@ class PortfolioOptimizer:
             raise ValueError("Budget and precision combination too high for DP memory limits.")
         n = len(self.assets)
         
-        # Using 2D DP table for visualization purposes (Asset i+1 vs Budget w)
+        # Using 2D DP table (Asset i+1 vs Budget w)
         dp = [[0.0] * (W + 1) for _ in range(n + 1)]
         keep = [[False] * (W + 1) for _ in range(n)]
 
@@ -51,25 +51,6 @@ class PortfolioOptimizer:
                 else:
                     dp[i+1][w] = dp[i][w]
         
-        # Step 1: Deep copy and snapshot for visualization
-        self.last_dp_table = [row[:] for row in dp]
-        self.last_dp_assets = [a for a in self.assets]
-        self.last_dp_W = W
-        self.last_dp_path = []
-        
-        # Backtrack to find path as requested (tracking every visited cell)
-        curr_i, curr_w = n, W
-        while curr_i > 0 and curr_w >= 0:
-            self.last_dp_path.append((curr_i, curr_w))
-            if dp[curr_i][curr_w] != dp[curr_i-1][curr_w]:
-                cost_i = int(self.assets[curr_i-1].cost * scale)
-                curr_w -= cost_i
-            curr_i -= 1
-        if curr_w >= 0:
-            self.last_dp_path.append((0, curr_w))
-        if (0, 0) not in self.last_dp_path:
-            self.last_dp_path.append((0, 0))
-
         chosen = []
         curr_w = W
         for i in range(n - 1, -1, -1):
@@ -79,7 +60,7 @@ class PortfolioOptimizer:
                 curr_w -= cost_i
                 
         execution_time = time.perf_counter() - start_time
-        return dp[n][W], chosen[::-1], execution_time, self.last_dp_table, self.last_dp_path, scale
+        return dp[n][W], chosen[::-1], execution_time
 
     def greedy_fractional(self) -> Tuple[float, List[Tuple[Asset, float]], float]:
         start_time = time.perf_counter()
@@ -104,21 +85,6 @@ class PortfolioOptimizer:
         execution_time = time.perf_counter() - start_time
         return total_return, allocation, execution_time
 
-    def greedy_01(self) -> Tuple[float, List[Asset], float]:
-        start_time = time.perf_counter()
-        sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
-        total_return = 0.0
-        current_budget = self.budget
-        chosen = []
-        
-        for asset in sorted_assets:
-            if current_budget >= asset.cost:
-                total_return += asset.expected_return
-                current_budget -= asset.cost
-                chosen.append(asset)
-        
-        execution_time = time.perf_counter() - start_time
-        return total_return, chosen, execution_time
 
     def branch_and_bound(self) -> Tuple[float, List[Asset], float]:
         start_time = time.perf_counter()
