@@ -4,7 +4,7 @@ import customtkinter as ctk
 class PortfolioSummaryFrame(ctk.CTkFrame):
     def __init__(self, parent, bg_color, card_bg, accent_color, text_color):
         # We pass card_bg as the fg_color of the frame to act as a card container
-        super().__init__(parent, fg_color=card_bg, corner_radius=12, border_width=1, border_color="#2d2d2d")
+        super().__init__(parent, fg_color=card_bg, corner_radius=12, border_width=1, border_color="#e5e7eb")
         
         self.accent_color = accent_color
         self.text_color = text_color
@@ -29,7 +29,7 @@ class PortfolioSummaryFrame(ctk.CTkFrame):
         self.cost_lbl = ctk.CTkLabel(
             self.metrics_container, 
             text="Total Cost: $0", 
-            text_color="#ff4b2b", 
+            text_color="#dc2626", 
             font=('Segoe UI', 14, 'bold')
         )
         self.cost_lbl.pack(side="left", expand=True)
@@ -37,7 +37,7 @@ class PortfolioSummaryFrame(ctk.CTkFrame):
         self.return_lbl = ctk.CTkLabel(
             self.metrics_container, 
             text="Total Return: $0", 
-            text_color="#00ff00", 
+            text_color="#059669", 
             font=('Segoe UI', 14, 'bold')
         )
         self.return_lbl.pack(side="left", expand=True)
@@ -59,7 +59,7 @@ class PortfolioSummaryFrame(ctk.CTkFrame):
             orientation="horizontal", 
             height=12,
             progress_color=self.accent_color,
-            fg_color="#1a1a2e"
+            fg_color="#e5e7eb"
         )
         self.pb.pack(fill="x", pady=2)
         self.pb.set(0.0) # CTkProgressBar values must be between 0.0 and 1.0
@@ -76,7 +76,7 @@ class PortfolioSummaryFrame(ctk.CTkFrame):
         self.rem_lbl = ctk.CTkLabel(
             self, 
             text="Remaining Budget: $0", 
-            text_color="#999999", 
+            text_color="#4b5563", 
             font=('Segoe UI', 13, 'italic')
         )
         self.rem_lbl.pack(anchor="w", padx=10, pady=(4, 8))
