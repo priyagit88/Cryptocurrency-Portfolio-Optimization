@@ -31,6 +31,7 @@ class PortfolioGUI:
         self.last_dp_return = 0.0
         self.chart_results = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
         self.chart_times = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
+        self.chart_ops = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
 
         # GUI Variables (Explicit separation to fix leaks)
         self.budget_var = tk.StringVar(value="650")
@@ -226,8 +227,8 @@ class PortfolioGUI:
         comp_frame = ctk.CTkFrame(p5, fg_color="transparent")
         comp_frame.pack(fill="x", padx=10, pady=(0, 10))
         
-        self.comp = ttk.Treeview(comp_frame, columns=("S", "V", "T", "N"), show="headings", height=3)
-        for c, h in zip(("S", "V", "T", "N"), ("Strategy", "Return ($)", "Time", "Note")):
+        self.comp = ttk.Treeview(comp_frame, columns=("S", "V", "T", "O", "N"), show="headings", height=3)
+        for c, h in zip(("S", "V", "T", "O", "N"), ("Strategy", "Return ($)", "Time", "Operations", "Note")):
             self.comp.heading(c, text=h)
             self.comp.column(c, width=100, anchor="center")
         self.comp.pack(fill="x")
@@ -256,6 +257,7 @@ class PortfolioGUI:
         
         tab2_frm.grid_columnconfigure(0, weight=1)
         tab2_frm.grid_columnconfigure(1, weight=1)
+        tab2_frm.grid_columnconfigure(2, weight=1)
         tab2_frm.grid_rowconfigure(0, weight=1)
         
         # Left Card: Return Chart
@@ -271,9 +273,9 @@ class PortfolioGUI:
         self.canvas_ret = FigureCanvasTkAgg(self.fig_ret, master=self.card_ret)
         self.canvas_ret.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=(0, 10))
         
-        # Right Card: Time Chart
+        # Middle Card: Time Chart
         self.card_time = ctk.CTkFrame(tab2_frm, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#e5e7eb")
-        self.card_time.grid(row=0, column=1, padx=(10, 0), pady=0, sticky="nsew")
+        self.card_time.grid(row=0, column=1, padx=(10, 10), pady=0, sticky="nsew")
         
         lbl_time_title = ctk.CTkLabel(self.card_time, text="ALGORITHM EXECUTION TIME", font=('Segoe UI', 13, 'bold'), text_color=self.accent_color)
         lbl_time_title.pack(anchor="w", padx=15, pady=(10, 5))
@@ -283,6 +285,19 @@ class PortfolioGUI:
         self.ax_time.set_facecolor('#ffffff')
         self.canvas_time = FigureCanvasTkAgg(self.fig_time, master=self.card_time)
         self.canvas_time.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=(0, 10))
+        
+        # Right Card: Operations Chart
+        self.card_ops = ctk.CTkFrame(tab2_frm, fg_color=self.card_bg, corner_radius=12, border_width=1, border_color="#e5e7eb")
+        self.card_ops.grid(row=0, column=2, padx=(10, 0), pady=0, sticky="nsew")
+        
+        lbl_ops_title = ctk.CTkLabel(self.card_ops, text="ALGORITHM OPERATIONS COUNT", font=('Segoe UI', 13, 'bold'), text_color=self.accent_color)
+        lbl_ops_title.pack(anchor="w", padx=15, pady=(10, 5))
+        
+        self.fig_ops = Figure(figsize=(5, 4), facecolor='#ffffff')
+        self.ax_ops = self.fig_ops.add_subplot(111)
+        self.ax_ops.set_facecolor('#ffffff')
+        self.canvas_ops = FigureCanvasTkAgg(self.fig_ops, master=self.card_ops)
+        self.canvas_ops.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=(0, 10))
         
         self.update_chart()
 
@@ -328,6 +343,27 @@ class PortfolioGUI:
         self.fig_time.tight_layout()
         self.canvas_time.draw()
 
+        # 3. Update Operations Chart
+        self.ax_ops.clear()
+        self.ax_ops.set_facecolor('#ffffff')
+        vals_ops = [self.chart_ops["DP"], self.chart_ops["Greedy"], self.chart_ops["B&B"]]
+        colors_ops = ['#10b981', '#ef4444', '#3b82f6']
+        bars_ops = self.ax_ops.bar(algs, vals_ops, color=colors_ops, width=0.4)
+        
+        max_ops = max(vals_ops) if vals_ops else 0
+        y_offset_ops = (max_ops * 0.02) if max_ops > 0 else 1
+        for b, v in zip(bars_ops, vals_ops):
+            label_text = f"{v:.1f}" if isinstance(v, float) and v % 1 != 0 else f"{int(v)}"
+            self.ax_ops.text(b.get_x()+b.get_width()/2, b.get_height() + y_offset_ops, label_text, ha='center', color='#111827', fontweight='bold')
+        self.ax_ops.set_ylabel('Operations Count', color='#2563eb')
+        self.ax_ops.tick_params(colors='#4b5563')
+        
+        for spine in self.ax_ops.spines.values():
+            spine.set_color('#e5e7eb')
+        self.ax_ops.grid(True, linestyle='--', alpha=0.6, color='#e5e7eb')
+        self.fig_ops.tight_layout()
+        self.canvas_ops.draw()
+
     def run_all(self): 
         self.run_dp()
         self.run_greedy()
@@ -346,7 +382,7 @@ class PortfolioGUI:
         self.refresh()
         opt = PortfolioOptimizer(4, self.assets)
         g_v, _, _ = opt.greedy_01()
-        dp_v, _, _, _, _, _ = opt.dynamic_programming()
+        dp_v, _, _, _, _, _, _, _ = opt.dynamic_programming()
         self.cex_t.set(f"Greedy 0/1 Total: ${g_v} | DP Total: ${dp_v}")
         self.cex_w.set(f"DP Efficiency Win: +${dp_v - g_v}")
         self.run_all()
@@ -362,6 +398,7 @@ class PortfolioGUI:
         self.refresh()
         self.chart_results = {"DP": 0, "Greedy": 0, "B&B": 0}
         self.chart_times = {"DP": 0, "Greedy": 0, "B&B": 0}
+        self.chart_ops = {"DP": 0, "Greedy": 0, "B&B": 0}
         self.update_chart()
 
     def add_asset(self):
@@ -391,19 +428,20 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, ch, t, tbl, p, s = opt.dynamic_programming()
+                v, ch, t, tbl, p, s, dp_comp, dp_cells = opt.dynamic_programming()
                 self.last_dp_table = tbl
                 self.last_dp_path = p
                 self.last_dp_assets = opt.assets[:]
                 self.last_dp_W = int(b * s)
                 self.last_dp_scale = s
                 self.last_dp_return = v
-                self._update_matrix("DP (0/1)", v, t, "Sub-Optimal")
+                self._update_matrix("DP (0/1)", v, t, dp_comp, "Sub-Optimal")
                 self.summary.update_summary(ch, v, b)
                 self.chart_results["DP"] = v
                 self.chart_times["DP"] = t * 1000
+                self.chart_ops["DP"] = dp_comp
                 self.update_chart()
-                self._log(f"DP Result: ${v:.1f}")
+                self._log(f"DP Result: ${v:.1f} | Comparisons: {dp_comp} | Cell Fills: {dp_cells}")
         except Exception as e: 
             self._log(f"DP Error: {e}")
 
@@ -412,13 +450,15 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, al, t = opt.greedy_fractional()
-                self._update_matrix("Greedy (Frac)", v, t, "Optimal")
+                v, al, t, g_comp, g_sort_ops = opt.greedy_fractional()
+                total_ops = g_comp + g_sort_ops
+                self._update_matrix("Greedy (Frac)", v, t, f"{total_ops:.1f}", "Optimal")
                 self.summary.update_summary(al, v, b)
                 self.chart_results["Greedy"] = v
                 self.chart_times["Greedy"] = t * 1000
+                self.chart_ops["Greedy"] = total_ops
                 self.update_chart()
-                self._log(f"Greedy (Frac) Result: ${v:.1f}")
+                self._log(f"Greedy (Frac) Result: ${v:.1f} | Comparisons: {g_comp} | Sort Ops: {g_sort_ops:.2f}")
         except Exception as e: 
             self._log(f"Greedy Error: {e}")
 
@@ -427,21 +467,23 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, ch, t = opt.branch_and_bound()
-                self._update_matrix("B&B (0/1)", v, t, "Sub-Optimal")
+                v, ch, t, bb_explored, bb_pruned = opt.branch_and_bound()
+                total_ops = bb_explored + bb_pruned
+                self._update_matrix("B&B (0/1)", v, t, total_ops, "Sub-Optimal")
                 self.summary.update_summary(ch, v, b)
                 self.chart_results["B&B"] = v
                 self.chart_times["B&B"] = t * 1000
+                self.chart_ops["B&B"] = total_ops
                 self.update_chart()
-                self._log(f"B&B Result: ${v:.1f}")
+                self._log(f"B&B Result: ${v:.1f} | Nodes Explored: {bb_explored} | Nodes Pruned: {bb_pruned}")
         except Exception as e: 
             self._log(f"B&B Error: {e}")
 
-    def _update_matrix(self, s, v, t, n="Optimal"):
+    def _update_matrix(self, s, v, t, ops, n="Optimal"):
         for i in self.comp.get_children():
             if self.comp.item(i)['values'][0] == s: 
                 self.comp.delete(i)
-        self.comp.insert("", "end", values=(s, f"${v:.1f}", f"{t*1000:.1f}ms", n))
+        self.comp.insert("", "end", values=(s, f"${v:.1f}", f"{t*1000:.1f}ms", ops, n))
 
     def show_dp_table_window(self):
         if not self.last_dp_table:

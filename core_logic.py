@@ -1,4 +1,5 @@
 import time
+import math
 from typing import List, Tuple
 
 class Asset:
@@ -16,7 +17,7 @@ class PortfolioOptimizer:
         self.budget = budget
         self.assets = assets
 
-    def dynamic_programming(self) -> Tuple[float, List[Asset], float, List[List[float]], List[List[bool]], int]:
+    def dynamic_programming(self) -> Tuple[float, List[Asset], float, List[List[float]], List[List[bool]], int, int, int]:
         start_time = time.perf_counter()
         # Find maximum decimal places to determine scale (checking both assets and budget)
         max_decimals = 0
@@ -38,18 +39,24 @@ class PortfolioOptimizer:
         dp = [[0.0] * (W + 1) for _ in range(n + 1)]
         keep = [[False] * (W + 1) for _ in range(n)]
 
+        comparisons = 0
+        cell_fills = 0
         for i in range(n):
             cost_i = int(self.assets[i].cost * scale)
             val_i = self.assets[i].expected_return
             for w in range(W + 1):
+                comparisons += 1
                 if cost_i <= w:
                     if dp[i][w - cost_i] + val_i > dp[i][w]:
                         dp[i+1][w] = dp[i][w - cost_i] + val_i
+                        cell_fills += 1
                         keep[i][w] = True
                     else:
                         dp[i+1][w] = dp[i][w]
+                        cell_fills += 1
                 else:
                     dp[i+1][w] = dp[i][w]
+                    cell_fills += 1
         
         # Step 1: Deep copy and snapshot for visualization
         self.last_dp_table = [row[:] for row in dp]
@@ -79,16 +86,21 @@ class PortfolioOptimizer:
                 curr_w -= cost_i
                 
         execution_time = time.perf_counter() - start_time
-        return dp[n][W], chosen[::-1], execution_time, self.last_dp_table, self.last_dp_path, scale
+        return dp[n][W], chosen[::-1], execution_time, self.last_dp_table, self.last_dp_path, scale, comparisons, cell_fills
 
-    def greedy_fractional(self) -> Tuple[float, List[Tuple[Asset, float]], float]:
+    def greedy_fractional(self) -> Tuple[float, List[Tuple[Asset, float]], float, int, float]:
         start_time = time.perf_counter()
         sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
         total_return = 0.0
         current_budget = self.budget
         allocation = [] # List of (Asset, weight)
         
+        n = len(self.assets)
+        sort_operations = n * math.log2(n) if n > 1 else 0.0
+        comparisons = 0
+        
         for asset in sorted_assets:
+            comparisons += 1
             if current_budget >= asset.cost:
                 total_return += asset.expected_return
                 current_budget -= asset.cost
@@ -102,7 +114,7 @@ class PortfolioOptimizer:
                 break
         
         execution_time = time.perf_counter() - start_time
-        return total_return, allocation, execution_time
+        return total_return, allocation, execution_time, comparisons, sort_operations
 
     def greedy_01(self) -> Tuple[float, List[Asset], float]:
         start_time = time.perf_counter()
@@ -120,13 +132,13 @@ class PortfolioOptimizer:
         execution_time = time.perf_counter() - start_time
         return total_return, chosen, execution_time
 
-    def branch_and_bound(self) -> Tuple[float, List[Asset], float]:
+    def branch_and_bound(self) -> Tuple[float, List[Asset], float, int, int]:
         start_time = time.perf_counter()
         sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
         n = len(sorted_assets)
         
         if n == 0:
-            return 0.0, [], 0.0
+            return 0.0, [], 0.0, 0, 0
             
         class Node:
             def __init__(self, level, profit, weight, bound, items_included):
@@ -161,8 +173,12 @@ class PortfolioOptimizer:
         max_profit = 0.0
         best_items = []
         
+        nodes_explored = 0
+        nodes_pruned = 0
+        
         while Q:
             u = Q.pop(0)
+            nodes_explored += 1
             
             if u.level == -1:
                 v_level = 0
@@ -186,6 +202,8 @@ class PortfolioOptimizer:
             v_include.bound = bound(v_include)
             if v_include.bound > max_profit:
                 Q.append(v_include)
+            else:
+                nodes_pruned += 1
                 
             v_exclude = Node(
                 level=v_level,
@@ -198,6 +216,8 @@ class PortfolioOptimizer:
             
             if v_exclude.bound > max_profit:
                 Q.append(v_exclude)
+            else:
+                nodes_pruned += 1
         
         execution_time = time.perf_counter() - start_time
-        return max_profit, best_items, execution_time
+        return max_profit, best_items, execution_time, nodes_explored, nodes_pruned
