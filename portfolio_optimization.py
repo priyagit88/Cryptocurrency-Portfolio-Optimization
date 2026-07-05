@@ -376,17 +376,6 @@ class PortfolioGUI:
         self.refresh()
         self._log("Demo dataset loaded (650 budget).")
 
-    def load_counterexample(self):
-        self.assets = [Asset("P", 1, 1), Asset("Q", 2, 4), Asset("R", 3, 5)]
-        self.budget_var.set("4")
-        self.refresh()
-        opt = PortfolioOptimizer(4, self.assets)
-        g_v, _, _ = opt.greedy_01()
-        dp_v, _, _, _, _, _, _, _ = opt.dynamic_programming()
-        self.cex_t.set(f"Greedy 0/1 Total: ${g_v} | DP Total: ${dp_v}")
-        self.cex_w.set(f"DP Efficiency Win: +${dp_v - g_v}")
-        self.run_all()
-
     def refresh(self):
         for i in self.tree.get_children(): 
             self.tree.delete(i)

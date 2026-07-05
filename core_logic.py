@@ -116,22 +116,6 @@ class PortfolioOptimizer:
         execution_time = time.perf_counter() - start_time
         return total_return, allocation, execution_time, comparisons, sort_operations
 
-    def greedy_01(self) -> Tuple[float, List[Asset], float]:
-        start_time = time.perf_counter()
-        sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
-        total_return = 0.0
-        current_budget = self.budget
-        chosen = []
-        
-        for asset in sorted_assets:
-            if current_budget >= asset.cost:
-                total_return += asset.expected_return
-                current_budget -= asset.cost
-                chosen.append(asset)
-        
-        execution_time = time.perf_counter() - start_time
-        return total_return, chosen, execution_time
-
     def branch_and_bound(self) -> Tuple[float, List[Asset], float, int, int]:
         start_time = time.perf_counter()
         sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
