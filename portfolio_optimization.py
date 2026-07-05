@@ -32,6 +32,11 @@ class PortfolioGUI:
         self.chart_results = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
         self.chart_times = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
         self.chart_ops = {"DP": 0.0, "Greedy": 0.0, "B&B": 0.0}
+        self.run_count_dp = 0
+        self.run_count_greedy = 0
+        self.run_count_bb = 0
+        self.log_history = []
+        self.current_log_filter = "All"
 
         # GUI Variables (Explicit separation to fix leaks)
         self.budget_var = tk.StringVar(value="650")
@@ -91,9 +96,11 @@ class PortfolioGUI:
         
         self.notebook.add(" Dashboard ")
         self.notebook.add(" Charts & Analysis ")
+        self.notebook.add(" Logs ")
         
         tab1 = self.notebook.tab(" Dashboard ")
         tab2 = self.notebook.tab(" Charts & Analysis ")
+        tab3 = self.notebook.tab(" Logs ")
 
         # TAB 1: DASHBOARD
         # Scrollable container using CTkScrollableFrame
@@ -299,6 +306,55 @@ class PortfolioGUI:
         self.canvas_ops = FigureCanvasTkAgg(self.fig_ops, master=self.card_ops)
         self.canvas_ops.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=(0, 10))
         
+        # TAB 3: LOGS / HISTORY (Unified Table)
+        logs_container = ctk.CTkFrame(tab3, fg_color="transparent")
+        logs_container.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        lbl_logs_title = ctk.CTkLabel(logs_container, text="COMPREHENSIVE ANALYSIS LOGS & HISTORY", font=('Segoe UI', 14, 'bold'), text_color=self.accent_color)
+        lbl_logs_title.pack(anchor="w", pady=(0, 8))
+        
+        filter_frm = ctk.CTkFrame(logs_container, fg_color="transparent")
+        filter_frm.pack(fill="x", pady=(0, 10))
+        
+        lbl_filter = ctk.CTkLabel(filter_frm, text="Filter by Algorithm:", font=('Segoe UI', 12, 'bold'), text_color="#4b5563")
+        lbl_filter.pack(side="left", padx=(0, 10))
+        
+        self.btn_filter_all = ctk.CTkButton(filter_frm, text="All", width=100, fg_color=self.accent_color, hover_color="#1d4ed8", text_color="white", font=('Segoe UI', 12, 'bold'), command=lambda: self.set_log_filter("All"))
+        self.btn_filter_all.pack(side="left", padx=4)
+        
+        self.btn_filter_dp = ctk.CTkButton(filter_frm, text="DP (0/1)", width=100, fg_color="#e5e7eb", hover_color="#d1d5db", text_color="#1f2937", font=('Segoe UI', 12, 'bold'), command=lambda: self.set_log_filter("DP (0/1)"))
+        self.btn_filter_dp.pack(side="left", padx=4)
+        
+        self.btn_filter_greedy = ctk.CTkButton(filter_frm, text="Greedy (Frac)", width=100, fg_color="#e5e7eb", hover_color="#d1d5db", text_color="#1f2937", font=('Segoe UI', 12, 'bold'), command=lambda: self.set_log_filter("Greedy (Frac)"))
+        self.btn_filter_greedy.pack(side="left", padx=4)
+        
+        self.btn_filter_bb = ctk.CTkButton(filter_frm, text="B&B (0/1)", width=100, fg_color="#e5e7eb", hover_color="#d1d5db", text_color="#1f2937", font=('Segoe UI', 12, 'bold'), command=lambda: self.set_log_filter("B&B (0/1)"))
+        self.btn_filter_bb.pack(side="left", padx=4)
+        
+        logs_tree_frame = ctk.CTkFrame(logs_container, fg_color="transparent")
+        logs_tree_frame.pack(fill="both", expand=True)
+        
+        logs_scroll = ttk.Scrollbar(logs_tree_frame, orient="vertical")
+        self.tree_logs = ttk.Treeview(
+            logs_tree_frame, 
+            columns=("R", "Alg", "B", "Rem", "A", "S", "C", "F", "SO", "NE", "NP", "Res", "T"), 
+            show="headings", 
+            height=20, 
+            yscrollcommand=logs_scroll.set
+        )
+        logs_scroll.config(command=self.tree_logs.yview)
+        
+        for col, heading, width in zip(
+            ("R", "Alg", "B", "Rem", "A", "S", "C", "F", "SO", "NE", "NP", "Res", "T"),
+            ("Run #", "Algorithm", "Budget ($)", "Remaining ($)", "# Assets", "Scale", "Comparisons", "Cell Fills", "Sort Ops", "Nodes Explored", "Nodes Pruned", "Result ($)", "Time (ms)"),
+            (50, 110, 85, 95, 70, 55, 90, 80, 75, 105, 95, 90, 80)
+        ):
+            self.tree_logs.heading(col, text=heading)
+            self.tree_logs.column(col, width=width, anchor="center")
+            
+        logs_scroll.pack(side="right", fill="y")
+        self.tree_logs.pack(fill="both", expand=True)
+        
         self.update_chart()
 
     def update_chart(self):
@@ -363,6 +419,28 @@ class PortfolioGUI:
         self.ax_ops.grid(True, linestyle='--', alpha=0.6, color='#e5e7eb')
         self.fig_ops.tight_layout()
         self.canvas_ops.draw()
+
+    def set_log_filter(self, algo):
+        self.current_log_filter = algo
+        buttons = {
+            "All": self.btn_filter_all,
+            "DP (0/1)": self.btn_filter_dp,
+            "Greedy (Frac)": self.btn_filter_greedy,
+            "B&B (0/1)": self.btn_filter_bb
+        }
+        for name, btn in buttons.items():
+            if name == algo:
+                btn.configure(fg_color=self.accent_color, hover_color="#1d4ed8", text_color="white")
+            else:
+                btn.configure(fg_color="#e5e7eb", hover_color="#d1d5db", text_color="#1f2937")
+        self.refresh_log_table()
+
+    def refresh_log_table(self):
+        for i in self.tree_logs.get_children():
+            self.tree_logs.delete(i)
+        for row in self.log_history:
+            if self.current_log_filter == "All" or row[1] == self.current_log_filter:
+                self.tree_logs.insert("", "end", values=row)
 
     def run_all(self): 
         self.run_dp()
@@ -431,6 +509,25 @@ class PortfolioGUI:
                 self.chart_ops["DP"] = dp_comp
                 self.update_chart()
                 self._log(f"DP Result: ${v:.1f} | Comparisons: {dp_comp} | Cell Fills: {dp_cells}")
+                self.run_count_dp += 1
+                rem_budget = b - sum(a.cost for a in ch)
+                row_val = (
+                    self.run_count_dp,
+                    "DP (0/1)",
+                    f"${b:.1f}",
+                    f"${rem_budget:.1f}",
+                    len(self.assets),
+                    s,
+                    dp_comp,
+                    dp_cells,
+                    "-",
+                    "-",
+                    "-",
+                    f"${v:.1f}",
+                    f"{t*1000:.2f}"
+                )
+                self.log_history.append(row_val)
+                self.refresh_log_table()
         except Exception as e: 
             self._log(f"DP Error: {e}")
 
@@ -448,6 +545,25 @@ class PortfolioGUI:
                 self.chart_ops["Greedy"] = total_ops
                 self.update_chart()
                 self._log(f"Greedy (Frac) Result: ${v:.1f} | Comparisons: {g_comp} | Sort Ops: {g_sort_ops:.2f}")
+                self.run_count_greedy += 1
+                rem_budget = b - sum(a.cost * frac for a, frac in al)
+                row_val = (
+                    self.run_count_greedy,
+                    "Greedy (Frac)",
+                    f"${b:.1f}",
+                    f"${rem_budget:.1f}",
+                    len(self.assets),
+                    "-",
+                    g_comp,
+                    "-",
+                    f"{g_sort_ops:.1f}",
+                    "-",
+                    "-",
+                    f"${v:.1f}",
+                    f"{t*1000:.2f}"
+                )
+                self.log_history.append(row_val)
+                self.refresh_log_table()
         except Exception as e: 
             self._log(f"Greedy Error: {e}")
 
@@ -465,6 +581,25 @@ class PortfolioGUI:
                 self.chart_ops["B&B"] = total_ops
                 self.update_chart()
                 self._log(f"B&B Result: ${v:.1f} | Nodes Explored: {bb_explored} | Nodes Pruned: {bb_pruned}")
+                self.run_count_bb += 1
+                rem_budget = b - sum(a.cost for a in ch)
+                row_val = (
+                    self.run_count_bb,
+                    "B&B (0/1)",
+                    f"${b:.1f}",
+                    f"${rem_budget:.1f}",
+                    len(self.assets),
+                    "-",
+                    "-",
+                    "-",
+                    "-",
+                    bb_explored,
+                    bb_pruned,
+                    f"${v:.1f}",
+                    f"{t*1000:.2f}"
+                )
+                self.log_history.append(row_val)
+                self.refresh_log_table()
         except Exception as e: 
             self._log(f"B&B Error: {e}")
 
