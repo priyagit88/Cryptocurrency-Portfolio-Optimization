@@ -337,17 +337,20 @@ class PortfolioGUI:
         logs_scroll = ttk.Scrollbar(logs_tree_frame, orient="vertical")
         self.tree_logs = ttk.Treeview(
             logs_tree_frame, 
-            columns=("R", "Alg", "B", "Rem", "A", "S", "C", "F", "SO", "NE", "NP", "Res", "T"), 
+            columns=("R", "Alg", "Item", "B", "Rem", "A", "S", "C", "F", "SO", "NE", "NP", "Res", "T"), 
             show="headings", 
             height=20, 
             yscrollcommand=logs_scroll.set
         )
         logs_scroll.config(command=self.tree_logs.yview)
         
+        self.tree_logs.tag_configure("FINAL", background="#eff6ff", font=('Segoe UI', 13, 'bold'))
+        self.tree_logs.tag_configure("ITERATIVE", background="#ffffff", font=('Segoe UI', 13))
+        
         for col, heading, width in zip(
-            ("R", "Alg", "B", "Rem", "A", "S", "C", "F", "SO", "NE", "NP", "Res", "T"),
-            ("Run #", "Algorithm", "Budget ($)", "Remaining ($)", "# Assets", "Scale", "Comparisons", "Cell Fills", "Sort Ops", "Nodes Explored", "Nodes Pruned", "Result ($)", "Time (ms)"),
-            (50, 110, 85, 95, 70, 55, 90, 80, 75, 105, 95, 90, 80)
+            ("R", "Alg", "Item", "B", "Rem", "A", "S", "C", "F", "SO", "NE", "NP", "Res", "T"),
+            ("Run #", "Algorithm", "Step / Item Action", "Budget ($)", "Remaining ($)", "# Assets", "Scale", "Comparisons", "Cell Fills", "Sort Ops", "Nodes Explored", "Nodes Pruned", "Result ($)", "Time (ms)"),
+            (55, 110, 160, 85, 95, 70, 55, 90, 80, 75, 105, 95, 90, 80)
         ):
             self.tree_logs.heading(col, text=heading)
             self.tree_logs.column(col, width=width, anchor="center")
@@ -439,8 +442,15 @@ class PortfolioGUI:
         for i in self.tree_logs.get_children():
             self.tree_logs.delete(i)
         for row in self.log_history:
-            if self.current_log_filter == "All" or row[1] == self.current_log_filter:
-                self.tree_logs.insert("", "end", values=row)
+            algo_name = row[1]
+            row_type = row[-1]
+            display_values = row[:-1]
+            
+            if self.current_log_filter == "All":
+                if row_type == "FINAL":
+                    self.tree_logs.insert("", "end", values=display_values, tags=(row_type,))
+            elif algo_name == self.current_log_filter:
+                self.tree_logs.insert("", "end", values=display_values, tags=(row_type,))
 
     def run_all(self): 
         self.run_dp()
@@ -495,7 +505,7 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, ch, t, tbl, p, s, dp_comp, dp_cells = opt.dynamic_programming()
+                v, ch, t, tbl, p, s, dp_comp, dp_cells, dp_history = opt.dynamic_programming()
                 self.last_dp_table = tbl
                 self.last_dp_path = p
                 self.last_dp_assets = opt.assets[:]
@@ -510,13 +520,44 @@ class PortfolioGUI:
                 self.update_chart()
                 self._log(f"DP Result: ${v:.1f} | Comparisons: {dp_comp} | Cell Fills: {dp_cells}")
                 self.run_count_dp += 1
+                
+                for step_data in dp_history:
+                    step_num = step_data["step"]
+                    action_str = step_data["action"]
+                    rem_b = step_data["remaining_budget"]
+                    cur_ret = step_data["current_return"]
+                    a_count = step_data["assets_count"]
+                    comp = step_data["comparisons"]
+                    fills = step_data["cell_fills"]
+                    step_time = step_data.get("time_ms", 0.0)
+                    
+                    iter_row = (
+                        f"{self.run_count_dp}.{step_num}",
+                        "DP (0/1)",
+                        action_str,
+                        f"${b:.1f}",
+                        f"${rem_b:.1f}",
+                        f"{a_count}/{len(self.assets)}",
+                        s,
+                        comp,
+                        fills,
+                        "-",
+                        "-",
+                        "-",
+                        f"${cur_ret:.1f}",
+                        f"{step_time:.3f}",
+                        "ITERATIVE"
+                    )
+                    self.log_history.append(iter_row)
+                
                 rem_budget = b - sum(a.cost for a in ch)
                 row_val = (
-                    self.run_count_dp,
+                    f"{self.run_count_dp} (Final)",
                     "DP (0/1)",
+                    "FINAL SUMMARY",
                     f"${b:.1f}",
                     f"${rem_budget:.1f}",
-                    len(self.assets),
+                    f"{len(ch)}/{len(self.assets)}",
                     s,
                     dp_comp,
                     dp_cells,
@@ -524,7 +565,8 @@ class PortfolioGUI:
                     "-",
                     "-",
                     f"${v:.1f}",
-                    f"{t*1000:.2f}"
+                    f"{t*1000:.3f}",
+                    "FINAL"
                 )
                 self.log_history.append(row_val)
                 self.refresh_log_table()
@@ -536,7 +578,7 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, al, t, g_comp, g_sort_ops = opt.greedy_fractional()
+                v, al, t, g_comp, g_sort_ops, greedy_history = opt.greedy_fractional()
                 total_ops = g_comp + g_sort_ops
                 self._update_matrix("Greedy (Frac)", v, t, f"{total_ops:.1f}", "Optimal")
                 self.summary.update_summary(al, v, b)
@@ -546,13 +588,44 @@ class PortfolioGUI:
                 self.update_chart()
                 self._log(f"Greedy (Frac) Result: ${v:.1f} | Comparisons: {g_comp} | Sort Ops: {g_sort_ops:.2f}")
                 self.run_count_greedy += 1
+                
+                for step_data in greedy_history:
+                    step_num = step_data["step"]
+                    action_str = step_data["action"]
+                    rem_b = step_data["remaining_budget"]
+                    cur_ret = step_data["current_return"]
+                    a_count = step_data["assets_count"]
+                    comp = step_data["comparisons"]
+                    sort_ops = step_data["sort_ops"]
+                    step_time = step_data.get("time_ms", 0.0)
+                    
+                    iter_row = (
+                        f"{self.run_count_greedy}.{step_num}",
+                        "Greedy (Frac)",
+                        action_str,
+                        f"${b:.1f}",
+                        f"${rem_b:.1f}",
+                        f"{a_count}/{len(self.assets)}",
+                        "-",
+                        comp,
+                        "-",
+                        f"{sort_ops:.1f}",
+                        "-",
+                        "-",
+                        f"${cur_ret:.1f}",
+                        f"{step_time:.3f}",
+                        "ITERATIVE"
+                    )
+                    self.log_history.append(iter_row)
+                
                 rem_budget = b - sum(a.cost * frac for a, frac in al)
                 row_val = (
-                    self.run_count_greedy,
+                    f"{self.run_count_greedy} (Final)",
                     "Greedy (Frac)",
+                    "FINAL SUMMARY",
                     f"${b:.1f}",
                     f"${rem_budget:.1f}",
-                    len(self.assets),
+                    f"{len(al)}/{len(self.assets)}",
                     "-",
                     g_comp,
                     "-",
@@ -560,7 +633,8 @@ class PortfolioGUI:
                     "-",
                     "-",
                     f"${v:.1f}",
-                    f"{t*1000:.2f}"
+                    f"{t*1000:.3f}",
+                    "FINAL"
                 )
                 self.log_history.append(row_val)
                 self.refresh_log_table()
@@ -572,7 +646,7 @@ class PortfolioGUI:
             b = float(self.budget_var.get())
             opt = PortfolioOptimizer(b, self.assets)
             if opt:
-                v, ch, t, bb_explored, bb_pruned = opt.branch_and_bound()
+                v, ch, t, bb_explored, bb_pruned, bb_history = opt.branch_and_bound()
                 total_ops = bb_explored + bb_pruned
                 self._update_matrix("B&B (0/1)", v, t, total_ops, "Sub-Optimal")
                 self.summary.update_summary(ch, v, b)
@@ -582,13 +656,44 @@ class PortfolioGUI:
                 self.update_chart()
                 self._log(f"B&B Result: ${v:.1f} | Nodes Explored: {bb_explored} | Nodes Pruned: {bb_pruned}")
                 self.run_count_bb += 1
+                
+                for step_data in bb_history:
+                    step_num = step_data["step"]
+                    action_str = step_data["action"]
+                    rem_b = step_data["remaining_budget"]
+                    cur_ret = step_data["current_return"]
+                    a_count = step_data["assets_count"]
+                    explored = step_data["nodes_explored"]
+                    pruned = step_data["nodes_pruned"]
+                    step_time = step_data.get("time_ms", 0.0)
+                    
+                    iter_row = (
+                        f"{self.run_count_bb}.{step_num}",
+                        "B&B (0/1)",
+                        action_str,
+                        f"${b:.1f}",
+                        f"${rem_b:.1f}",
+                        f"{a_count}/{len(self.assets)}",
+                        "-",
+                        "-",
+                        "-",
+                        "-",
+                        explored,
+                        pruned,
+                        f"${cur_ret:.1f}",
+                        f"{step_time:.3f}",
+                        "ITERATIVE"
+                    )
+                    self.log_history.append(iter_row)
+                
                 rem_budget = b - sum(a.cost for a in ch)
                 row_val = (
-                    self.run_count_bb,
+                    f"{self.run_count_bb} (Final)",
                     "B&B (0/1)",
+                    "FINAL SUMMARY",
                     f"${b:.1f}",
                     f"${rem_budget:.1f}",
-                    len(self.assets),
+                    f"{len(ch)}/{len(self.assets)}",
                     "-",
                     "-",
                     "-",
@@ -596,7 +701,8 @@ class PortfolioGUI:
                     bb_explored,
                     bb_pruned,
                     f"${v:.1f}",
-                    f"{t*1000:.2f}"
+                    f"{t*1000:.3f}",
+                    "FINAL"
                 )
                 self.log_history.append(row_val)
                 self.refresh_log_table()

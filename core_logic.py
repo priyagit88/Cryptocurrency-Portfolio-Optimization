@@ -1,6 +1,6 @@
 import time
 import math
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 
 class Asset:
     def __init__(self, name: str, cost: float, expected_return: float):
@@ -17,7 +17,7 @@ class PortfolioOptimizer:
         self.budget = budget
         self.assets = assets
 
-    def dynamic_programming(self) -> Tuple[float, List[Asset], float, List[List[float]], List[List[bool]], int, int, int]:
+    def dynamic_programming(self) -> Tuple[float, List[Asset], float, List[List[float]], List[List[bool]], int, int, int, List[Dict[str, Any]]]:
         start_time = time.perf_counter()
         # Find maximum decimal places to determine scale (checking both assets and budget)
         max_decimals = 0
@@ -41,7 +41,9 @@ class PortfolioOptimizer:
 
         comparisons = 0
         cell_fills = 0
+        history = []
         for i in range(n):
+            asset_start_time = time.perf_counter()
             cost_i = int(self.assets[i].cost * scale)
             val_i = self.assets[i].expected_return
             for w in range(W + 1):
@@ -57,6 +59,31 @@ class PortfolioOptimizer:
                 else:
                     dp[i+1][w] = dp[i][w]
                     cell_fills += 1
+            asset_time = (time.perf_counter() - asset_start_time) * 1000
+            
+            # Calculate chosen subset at row i+1 for budget W
+            temp_chosen_cost = 0.0
+            temp_w = W
+            temp_count = 0
+            for r in range(i, -1, -1):
+                if keep[r][temp_w]:
+                    temp_chosen_cost += self.assets[r].cost
+                    cost_r = int(self.assets[r].cost * scale)
+                    temp_w -= cost_r
+                    temp_count += 1
+            rem_budget_at_step = self.budget - temp_chosen_cost
+            
+            history.append({
+                "step": i + 1,
+                "asset": self.assets[i],
+                "action": f"Row {i+1}: {self.assets[i].name}",
+                "remaining_budget": rem_budget_at_step,
+                "current_return": dp[i+1][W],
+                "assets_count": temp_count,
+                "comparisons": comparisons,
+                "cell_fills": cell_fills,
+                "time_ms": asset_time
+            })
         
         # Step 1: Deep copy and snapshot for visualization
         self.last_dp_table = [row[:] for row in dp]
@@ -86,9 +113,9 @@ class PortfolioOptimizer:
                 curr_w -= cost_i
                 
         execution_time = time.perf_counter() - start_time
-        return dp[n][W], chosen[::-1], execution_time, self.last_dp_table, self.last_dp_path, scale, comparisons, cell_fills
+        return dp[n][W], chosen[::-1], execution_time, self.last_dp_table, self.last_dp_path, scale, comparisons, cell_fills, history
 
-    def greedy_fractional(self) -> Tuple[float, List[Tuple[Asset, float]], float, int, float]:
+    def greedy_fractional(self) -> Tuple[float, List[Tuple[Asset, float]], float, int, float, List[Dict[str, Any]]]:
         start_time = time.perf_counter()
         sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
         total_return = 0.0
@@ -98,31 +125,46 @@ class PortfolioOptimizer:
         n = len(self.assets)
         sort_operations = n * math.log2(n) if n > 1 else 0.0
         comparisons = 0
+        history = []
         
-        for asset in sorted_assets:
+        for idx, asset in enumerate(sorted_assets):
+            asset_start_time = time.perf_counter()
             comparisons += 1
             if current_budget >= asset.cost:
                 total_return += asset.expected_return
                 current_budget -= asset.cost
+                fraction = 1.0
                 allocation.append((asset, 1.0))
             else:
-                fraction = current_budget / asset.cost
+                fraction = current_budget / asset.cost if asset.cost > 0 else 0.0
                 if fraction > 0:
                     total_return += asset.expected_return * fraction
                     allocation.append((asset, fraction))
                 current_budget = 0
-                break
+            asset_time = (time.perf_counter() - asset_start_time) * 1000
+            
+            history.append({
+                "step": idx + 1,
+                "asset": asset,
+                "action": f"{asset.name} ({fraction*100:.0f}%)",
+                "remaining_budget": current_budget,
+                "current_return": total_return,
+                "assets_count": len(allocation),
+                "comparisons": comparisons,
+                "sort_ops": sort_operations,
+                "time_ms": asset_time
+            })
         
         execution_time = time.perf_counter() - start_time
-        return total_return, allocation, execution_time, comparisons, sort_operations
+        return total_return, allocation, execution_time, comparisons, sort_operations, history
 
-    def branch_and_bound(self) -> Tuple[float, List[Asset], float, int, int]:
+    def branch_and_bound(self) -> Tuple[float, List[Asset], float, int, int, List[Dict[str, Any]]]:
         start_time = time.perf_counter()
         sorted_assets = sorted(self.assets, key=lambda x: x.ratio, reverse=True)
         n = len(sorted_assets)
         
         if n == 0:
-            return 0.0, [], 0.0, 0, 0
+            return 0.0, [], 0.0, 0, 0, []
             
         class Node:
             def __init__(self, level, profit, weight, bound, items_included):
@@ -159,6 +201,9 @@ class PortfolioOptimizer:
         
         nodes_explored = 0
         nodes_pruned = 0
+        history = []
+        logged_items_count = 0
+        level_start_time = time.perf_counter()
         
         while Q:
             u = Q.pop(0)
@@ -202,6 +247,43 @@ class PortfolioOptimizer:
                 Q.append(v_exclude)
             else:
                 nodes_pruned += 1
+                
+            if not Q or Q[0].level > u.level:
+                if u.level + 1 < n and u.level + 1 == logged_items_count:
+                    asset_time = (time.perf_counter() - level_start_time) * 1000
+                    asset_k = sorted_assets[logged_items_count]
+                    rem_b = self.budget - sum(a.cost for a in best_items)
+                    history.append({
+                        "step": logged_items_count + 1,
+                        "asset": asset_k,
+                        "action": f"L{logged_items_count+1}: {asset_k.name}",
+                        "remaining_budget": rem_b,
+                        "current_return": max_profit,
+                        "assets_count": len(best_items),
+                        "nodes_explored": nodes_explored,
+                        "nodes_pruned": nodes_pruned,
+                        "time_ms": asset_time
+                    })
+                    logged_items_count += 1
+                    level_start_time = time.perf_counter()
+        
+        while logged_items_count < n:
+            asset_time = (time.perf_counter() - level_start_time) * 1000
+            asset_k = sorted_assets[logged_items_count]
+            rem_b = self.budget - sum(a.cost for a in best_items)
+            history.append({
+                "step": logged_items_count + 1,
+                "asset": asset_k,
+                "action": f"L{logged_items_count+1}: {asset_k.name} (Pruned)",
+                "remaining_budget": rem_b,
+                "current_return": max_profit,
+                "assets_count": len(best_items),
+                "nodes_explored": nodes_explored,
+                "nodes_pruned": nodes_pruned,
+                "time_ms": asset_time
+            })
+            logged_items_count += 1
+            level_start_time = time.perf_counter()
         
         execution_time = time.perf_counter() - start_time
-        return max_profit, best_items, execution_time, nodes_explored, nodes_pruned
+        return max_profit, best_items, execution_time, nodes_explored, nodes_pruned, history
